@@ -1,30 +1,21 @@
 use std::fs::{File};
 use std::io;
 use std::io::{Read, Write};
+use chacha20poly1305::aead::{Aead, OsRng};
+use chacha20poly1305::{AeadCore, ChaCha20Poly1305, Key, KeyInit, Nonce};
 
+const AES_BLOCK_SIZE:usize=16;
 fn main() {
     let file_path=get_user_input("Enter the file path:");
     match read_file(&file_path) {
         Ok(content)=>{
             println!("Content of the file:");
             println!("{}",content);
-            let operation= get_user_input("Enter encrypt or decrypt :");
-            match operation.to_lowercase().as_str(){
-                "encrypt"=>{
-                    let encrypted_contect=encrypt(&content);
-                    println!("Encrypted content:");
-                    println!("{}",encrypted_contect)
-                },
-                "decrypt"=>{
-                    let decrypted_content=decrypt(&content);
-                    println!("decrypted content:");
-                    println!("{}",decrypted_content)
-                },
-                _=>{
-                    eprintln!("Invalid operation. Use 'encrypt', 'decrypt', or 'none'.");
-                    return;
-                }
-            }
+            let key = ChaCha20Poly1305::generate_key(&mut OsRng);
+            let nonce=ChaCha20Poly1305::generate_nonce(&mut OsRng);
+            let encrypted_contect=encrypt(&content,key,nonce);
+            println!("Encrypted content:");
+            println!("{:?}",encrypted_contect)
         }
         Err(err)=>{
             eprintln!("Error reading the file:{}",err);
@@ -48,32 +39,13 @@ fn read_file(file_path:&str)->io::Result<String>{
     Ok(content)
 }
 
-fn encrypt(content: &str)->String{
-    let encrypted_content:String=content
-        .chars()
-        .map(|c|{
-            if c.is_ascii_alphabetic() {
-                let base=if c.is_ascii_lowercase(){b'a'}else { b'A' };
-                (((c as u8 - base + 3) % 26) + base) as char
-            }else{
-                c
-            }
-        })
-        .collect();
-    encrypted_content
+fn encrypt(content: &str,key: Key,nonce: Nonce) ->Vec<u8>{
+    let cipher=ChaCha20Poly1305::new(&key);
+    let ciphertext=cipher.encrypt(&nonce,content.as_ref()).expect("failed to encrypt");
+    let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref()).expect("error");
+    println!("{:?}",plaintext);
+
+    ciphertext
+
 }
 
-fn decrypt(content: &str) -> String {
-    let decrypted_content: String = content
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphabetic() {
-                let base = if c.is_ascii_lowercase() { b'a' } else { b'A' };
-                (((c as u8 - base + 23) % 26) + base) as char
-            } else {
-                c
-            }
-        })
-        .collect();
-    decrypted_content
-}
